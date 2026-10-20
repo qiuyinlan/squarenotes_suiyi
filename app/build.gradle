@@ -6,11 +6,17 @@ android {
     namespace 'app.suiyi.notes'
     compileSdk 35
 
+    buildFeatures {
+        buildConfig true
+    }
+
     defaultConfig {
         applicationId 'app.suiyi.notes'
         minSdk 23
         targetSdk 35
         versionCode 1
         versionName '1.0'
+        def memberApiBaseUrl = providers.gradleProperty('memberApiBaseUrl').getOrElse('')
+        buildConfigField 'String', 'MEMBER_API_BASE_URL', '"' + memberApiBaseUrl + '"'
     }
 }
