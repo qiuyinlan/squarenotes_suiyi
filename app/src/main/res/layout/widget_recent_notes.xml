@@ -1,0 +1,27 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_recent_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_surface"
+    android:orientation="vertical"
+    android:padding="16dp">
+    <TextView
+        android:id="@+id/widget_recent_heading"
+        android:layout_width="match_parent"
+        android:layout_height="24dp"
+        android:text="最近笔记"
+        android:textColor="#FF888888"
+        android:textSize="12sp" />
+    <TextView
+        android:id="@+id/widget_recent_text"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:gravity="top"
+        android:maxLines="4"
+        android:text="打开碎忆查看"
+        android:textColor="#FF171717"
+        android:textSize="14sp"
+        android:textStyle="bold" />
+</LinearLayout>
