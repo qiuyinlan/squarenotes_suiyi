@@ -6,6 +6,33 @@ android {
     namespace 'app.suiyi.notes'
     compileSdk 35
 
+    def signingFilePath = providers.gradleProperty('signingPropertiesFile').getOrElse('D:/1.个人/自我介绍/秘钥/signing.properties')
+    def signingFile = file(signingFilePath)
+    def signingValues = new Properties()
+    if (signingFile.exists()) {
+        signingFile.withReader('UTF-8') { signingValues.load(it) }
+    }
+
+    signingConfigs {
+        release {
+            if (signingValues.getProperty('storeFile')) {
+                storeFile file(signingValues.getProperty('storeFile'))
+                storePassword signingValues.getProperty('storePassword')
+                keyAlias signingValues.getProperty('keyAlias')
+                keyPassword signingValues.getProperty('keyPassword')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            if (!signingValues.getProperty('storeFile')) {
+                throw new GradleException('Release signing is not configured in the signing properties file')
+            }
+            signingConfig signingConfigs.release
+        }
+    }
+
     buildFeatures {
         buildConfig true
     }
@@ -14,9 +41,12 @@ android {
         applicationId 'app.suiyi.notes'
         minSdk 23
         targetSdk 35
-        versionCode 1
-        versionName '1.0'
+        testInstrumentationRunner 'app.suiyi.notes.EditorRegressionInstrumentation'
+        versionCode providers.gradleProperty('appVersionCode').map { it.toInteger() }.getOrElse(1)
+        versionName providers.gradleProperty('appVersionName').getOrElse('1.0')
         def memberApiBaseUrl = providers.gradleProperty('memberApiBaseUrl').getOrElse('')
         buildConfigField 'String', 'MEMBER_API_BASE_URL', '"' + memberApiBaseUrl + '"'
+        def updateManifestUrl = providers.gradleProperty('updateManifestUrl').getOrElse('')
+        buildConfigField 'String', 'UPDATE_MANIFEST_URL', '"' + updateManifestUrl + '"'
     }
 }
