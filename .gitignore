@@ -4,3 +4,6 @@ local.properties
 .idea/
 *.iml
 *.apk
+__pycache__/
+backend/*.sqlite3*
+backend/.env
