@@ -86,7 +86,7 @@ public class EditorRegressionInstrumentation extends Instrumentation {
             app = (MainActivity) startActivitySync(launch); waitForIdleSync();
             main(() -> {
                 try { original = app.backupJson(); } catch (Exception e) { throw new AssertionError(e); }
-                app.notes.clear(); app.trash.clear(); app.labels.clear(); app.pinnedLabels.clear();
+                app.notes.clear(); app.trash.clear(); app.labels.clear(); app.pinnedLabels.clear(); app.notebooks.clear();
                 first = app.new Note(); first.title = "回归笔记 A"; second = app.new Note(); second.title = "回归笔记 B";
                 app.notes.add(first); app.notes.add(second); app.openNote(first, "");
                 app.saveUndo(); first.title = "A 已编辑"; Collections.swap(app.notes, 0, 1); app.current = 0;
@@ -113,6 +113,14 @@ public class EditorRegressionInstrumentation extends Instrumentation {
             touch(MotionEvent.ACTION_DOWN, center[0], center[1]); SystemClock.sleep(700); touch(MotionEvent.ACTION_UP, center[0], center[1]);
             main(() -> check(app.board.resizeSelected == top && app.board.selectedBlock == top, "long press release lost resize handles"));
             screenshot("qa-long-press.png");
+            float[] empty = new float[2]; int blockCount;
+            main(() -> { app.board.resizeSelected = null; empty[0] = app.board.offsetX + app.board.cell * 6.5f; empty[1] = app.board.offsetY + app.board.cell * 4.5f; });
+            blockCount = app.note.blocks.size();
+            touch(MotionEvent.ACTION_DOWN, empty[0], empty[1]); touch(MotionEvent.ACTION_UP, empty[0], empty[1]); SystemClock.sleep(450); waitForIdleSync();
+            main(() -> check(app.blockDialog == null && app.note.blocks.size() == blockCount, "single tap on empty canvas opened a new block"));
+            touch(MotionEvent.ACTION_DOWN, empty[0], empty[1]); touch(MotionEvent.ACTION_UP, empty[0], empty[1]);
+            touch(MotionEvent.ACTION_DOWN, empty[0], empty[1]); touch(MotionEvent.ACTION_UP, empty[0], empty[1]); waitForIdleSync();
+            main(() -> { check(app.blockDialog != null && app.blockDialog.isShowing(), "double tap on empty canvas did not open a new block"); app.blockDialog.dismiss(); });
             main(() -> {
                 app.labels.clear(); app.labels.addAll(Arrays.asList("父标签", "父标签/子标签", "父标签/子标签/孙标签"));
                 app.collapsedLabelFolders.clear(); app.collapsedLabelFolders.addAll(app.labels); app.drawerRootsCollapsed = true;
@@ -131,12 +139,81 @@ public class EditorRegressionInstrumentation extends Instrumentation {
                 check(app.trashRestoreButton.isEnabled(), "selected trash restore disabled"); app.trashRestoreButton.performClick();
                 check(app.trash.isEmpty() && app.notes.contains(first) && app.screen == 8, "batch restore failed");
             });
-            result.putString("stream", "PASS: real Android undo/redo identity, session isolation, read-only selection preview, tap/long-press gestures, nested tag collapse/expand, trash navigation and batch restore\n");
+            notebookRegression();
+            result.putString("stream", "PASS: editor regression, notebook creation/rename/color/multi-select/delete, note assignment, combined walk filters, backup round trip and legacy defaults\n");
         } catch (Throwable failure) { status = Activity.RESULT_CANCELED; result.putString("stream", android.util.Log.getStackTraceString(failure)); }
         finally {
-            if (app != null && original != null) main(() -> { app.finishEditorSession(); app.screen = 0; app.notes.clear(); app.trash.clear(); app.labels.clear(); app.pinnedLabels.clear(); app.timeline.clear(); try { app.parseStore(original); } catch (Exception e) { throw new AssertionError(e); } app.persist(); app.buildHome(); });
+            if (app != null && original != null) main(() -> { app.finishEditorSession(); app.screen = 0; app.notes.clear(); app.trash.clear(); app.labels.clear(); app.pinnedLabels.clear(); app.timeline.clear(); app.notebooks.clear(); app.walkNotebookId=null; app.activeNotebookId=null; try { app.parseStore(original); } catch (Exception e) { throw new AssertionError(e); } app.persist(); app.buildHome(); });
             getTargetContext().getSharedPreferences("suiyi", 0).edit().putBoolean("welcomeLetterSeen", welcome).commit();
         }
         finish(status, result);
+    }
+
+    void clickUi(String label) {
+        waitForIdleSync();
+        android.view.accessibility.AccessibilityNodeInfo root=getUiAutomation().getRootInActiveWindow();
+        check(root!=null,"no active window for "+label);
+        for(android.view.accessibility.AccessibilityNodeInfo node:root.findAccessibilityNodeInfosByText(label)) {
+            if(node.getText()!=null&&node.getText().toString().equals(label)) {
+                while(node!=null&&!node.isClickable())node=node.getParent();
+                check(node!=null&&node.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK),"cannot click "+label);
+                waitForIdleSync();return;
+            }
+        }
+        throw new AssertionError("missing UI option: "+label);
+    }
+    void inputUi(String value) {
+        waitForIdleSync();
+        android.view.accessibility.AccessibilityNodeInfo root=getUiAutomation().getRootInActiveWindow();
+        check(setInput(root,value),"missing name input");waitForIdleSync();
+    }
+    boolean setInput(android.view.accessibility.AccessibilityNodeInfo node,String value) {
+        if(node==null)return false;
+        if(node.isEditable()){Bundle args=new Bundle();args.putCharSequence(android.view.accessibility.AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,value);return node.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_TEXT,args);}
+        for(int i=0;i<node.getChildCount();i++)if(setInput(node.getChild(i),value))return true;
+        return false;
+    }
+    android.view.View notebookCover() {
+        android.widget.FrameLayout area=(android.widget.FrameLayout)app.root.getChildAt(1);
+        android.widget.ScrollView scroll=(android.widget.ScrollView)area.getChildAt(0);
+        android.view.ViewGroup list=(android.view.ViewGroup)scroll.getChildAt(0);
+        return ((android.view.ViewGroup)list.getChildAt(0)).getChildAt(0);
+    }
+    void notebookRegression() throws Exception {
+        main(()->{app.buildNotebooks();app.nameNotebook(null);});inputUi("日常手记");clickUi("保存");
+        main(()->{check(app.notebooks.size()==1,"notebook not created");app.nameNotebook(app.notebooks.get(0));});
+        inputUi("生活手记");clickUi("保存");
+        main(()->{check(app.notebooks.get(0).name.equals("生活手记"),"rename failed");app.notebookMenu(notebookCover(),app.notebooks.get(0));});
+        clickUi("改变颜色");clickUi("雾蓝");
+        main(()->{
+            check(app.notebooks.get(0).color==app.notebookColors[2],"color change failed");
+            app.notebooks.add(app.new Notebook("旅行"));app.buildNotebooks();
+        });screenshot("qa-notebooks.png");
+        main(()->{
+            notebookCover().performLongClick();check(app.notebookSelection&&app.selectedNotebooks.size()==1,"long press selection failed");
+            app.handleBack();check(!app.notebookSelection&&app.screen==10,"back did not leave selection");
+            notebookCover().performClick();check(app.screen==11,"cover did not open notes");app.createNote();
+            check(app.note.notebookId.isEmpty(),"new note should default to no notebook");app.note.text="记本回归测试";app.persist();app.assignNotebook(app.note);
+        });clickUi("生活手记");
+        main(()->{
+            check(app.note.notebookId.equals(app.notebooks.get(0).id),"assignment failed");app.handleBack();check(app.screen==11,"editor did not return to notebook");
+            app.walkNotebookId=app.notebooks.get(0).id;app.walkFilter=0;app.refreshWalkNotes();check(app.walkNotes.size()==1,"notebook walk filter leaked other notes");
+            app.walkFilter=3;app.refreshWalkNotes();check(app.walkNotes.isEmpty(),"date and notebook filters did not combine");
+            app.walkFilter=0;app.buildWalk();app.showWalkFilter();
+        });clickUi("选择记本（生活手记）");clickUi("无记本");
+        main(()->{
+            for(MainActivity.Note n:app.walkNotes)check(n.notebookId.isEmpty(),"unassigned walk filter failed");
+            try{
+                JSONObject snapshot=app.backupJson();app.notebooks.clear();app.notes.clear();app.trash.clear();app.timeline.clear();app.pinnedLabels.clear();app.parseStore(snapshot);
+                check(app.notebooks.size()==2&&app.notebooks.get(0).color==app.notebookColors[2],"notebook backup round trip failed");
+                check(app.new Note(new JSONObject()).notebookId.isEmpty(),"old note no longer defaults to no notebook");
+            }catch(Exception e){throw new AssertionError(e);}
+            app.buildNotebooks();notebookCover().performLongClick();
+            android.view.ViewGroup shelf=(android.view.ViewGroup)notebookCover().getParent();shelf.getChildAt(1).performClick();
+            check(app.selectedNotebooks.size()==2,"multi select failed");app.deleteNotebooks(app.selectedNotebooks);
+        });clickUi("删除");
+        main(()->{
+            check(app.notebooks.isEmpty(),"notebooks not deleted");boolean found=false;for(MainActivity.Note n:app.notes){check(n.notebookId.isEmpty(),"deleted notebook reference retained");if(n.text.equals("记本回归测试"))found=true;}check(found,"deleting notebook deleted its note");
+        });
     }
 }

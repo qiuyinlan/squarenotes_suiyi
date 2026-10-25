@@ -6,7 +6,7 @@ android {
     namespace 'app.suiyi.notes'
     compileSdk 35
 
-    def signingFilePath = providers.gradleProperty('signingPropertiesFile').getOrElse('D:/1.个人/自我介绍/秘钥/signing.properties')
+    def signingFilePath = providers.gradleProperty('signingPropertiesFile').getOrElse('D:/1.个人/自我介绍/碎忆秘钥/signing.properties')
     def signingFile = file(signingFilePath)
     def signingValues = new Properties()
     if (signingFile.exists()) {
