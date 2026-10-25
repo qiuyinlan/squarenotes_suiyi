@@ -193,7 +193,7 @@ public class EditorRegressionInstrumentation extends Instrumentation {
             notebookCover().performLongClick();check(app.notebookSelection&&app.selectedNotebooks.size()==1,"long press selection failed");
             app.handleBack();check(!app.notebookSelection&&app.screen==10,"back did not leave selection");
             notebookCover().performClick();check(app.screen==11,"cover did not open notes");app.createNote();
-            check(app.note.notebookId.isEmpty(),"new note should default to no notebook");app.note.text="记本回归测试";app.persist();app.assignNotebook(app.note);
+            check(app.note.notebookId.equals(app.activeNotebookId),"new note in notebook should inherit the notebook");app.note.text="记本回归测试";app.persist();
         });clickUi("生活手记");
         main(()->{
             check(app.note.notebookId.equals(app.notebooks.get(0).id),"assignment failed");app.handleBack();check(app.screen==11,"editor did not return to notebook");
