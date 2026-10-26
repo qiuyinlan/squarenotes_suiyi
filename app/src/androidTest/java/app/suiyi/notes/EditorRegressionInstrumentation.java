@@ -139,6 +139,7 @@ public class EditorRegressionInstrumentation extends Instrumentation {
                 check(app.trashRestoreButton.isEnabled(), "selected trash restore disabled"); app.trashRestoreButton.performClick();
                 check(app.trash.isEmpty() && app.notes.contains(first) && app.screen == 8, "batch restore failed");
             });
+            previewRegression();
             notebookRegression();
             result.putString("stream", "PASS: editor regression, notebook creation/rename/color/multi-select/delete, note assignment, combined walk filters, backup round trip and legacy defaults\n");
         } catch (Throwable failure) { status = Activity.RESULT_CANCELED; result.putString("stream", android.util.Log.getStackTraceString(failure)); }
@@ -218,4 +219,23 @@ public class EditorRegressionInstrumentation extends Instrumentation {
             check(app.notebooks.isEmpty(),"notebooks not deleted");boolean found=false;for(MainActivity.Note n:app.notes){check(n.notebookId.isEmpty(),"deleted notebook reference retained");if(n.text.equals("记本回归测试"))found=true;}check(found,"deleting notebook deleted its note");
         });
     }
+    void previewRegression() {
+        main(()->{
+            app.note=first;app.isLinear=true;app.note.text="预览内容保持只读";app.previewMode=false;app.buildEditor();
+            app.togglePreviewMode();check(app.previewMode&&app.linear==null,"preview still exposes an editable text field");
+            check(app.content.getChildAt(0) instanceof android.widget.ScrollView,"preview is not scrollable");
+            android.widget.ScrollView scroll=(android.widget.ScrollView)app.content.getChildAt(0);
+            android.view.ViewGroup page=(android.view.ViewGroup)scroll.getChildAt(0);TextView body=(TextView)page.getChildAt(0);
+            check(body.getText().toString().equals("预览内容保持只读"),"preview text does not match the note");
+            android.view.MotionEvent down=android.view.MotionEvent.obtain(10,10,android.view.MotionEvent.ACTION_DOWN,dp(24),dp(24),0);
+            android.view.MotionEvent up=android.view.MotionEvent.obtain(10,20,android.view.MotionEvent.ACTION_UP,dp(24),dp(24),0);
+            body.dispatchTouchEvent(down);body.dispatchTouchEvent(up);down.recycle();up.recycle();
+            check(app.previewMode&&app.note.text.equals("预览内容保持只读"),"preview touch changed editor state or note text");
+            app.togglePreviewMode();check(!app.previewMode&&app.linear!=null,"write icon did not restore editing");
+            app.linear.setText("退出预览后继续编辑");app.togglePreviewMode();
+            check(app.previewMode&&app.note.text.equals("退出预览后继续编辑"),"preview transition lost unsaved text");
+            app.togglePreviewMode();
+        });
+    }
+    int dp(int value) { return (int)(app.getResources().getDisplayMetrics().density*value+.5f); }
 }
