@@ -95,7 +95,7 @@ public class EditorRegressionInstrumentation extends Instrumentation {
                 android.widget.EditText listEditor=new android.widget.EditText(app);app.continueListOnEnter(listEditor);listEditor.setText("1.");listEditor.setSelection(2);listEditor.getText().insert(2," ");
                 check(listEditor.getText().toString().equals("  1. ")&&listEditor.getSelectionStart()==5,"typing an ordered-list trigger did not indent the list marker");
                 app.linear=new android.widget.EditText(app);app.linear.setText("item");app.linear.setSelection(0);app.insertListPrefix("1. ",true);
-                check(app.linear.getText().toString().equals("1. item")&&app.linear.getSelectionStart()==3,"ordered-list toolbar left the caret inside its marker");
+                check(app.linear.getText().toString().equals("  1. item")&&app.linear.getSelectionStart()==5,"ordered-list toolbar indentation or caret position differed from typed markers");
                 check(app.markdownPlainText("  - list item").equals("  • list item"),"unordered list preview did not render a bullet");
                 android.text.SpannableString bulletText=new android.text.SpannableString("  - list item");app.applyMarkdownStyles(bulletText);
                 check(bulletText.getSpans(0,bulletText.length(),MainActivity.MarkdownBulletSpan.class).length==1,"unordered list editor did not render a bullet span");
