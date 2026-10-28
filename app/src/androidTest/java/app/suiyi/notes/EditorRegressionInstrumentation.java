@@ -92,6 +92,8 @@ public class EditorRegressionInstrumentation extends Instrumentation {
                 check(!app.markdownPlainText(markdown).contains("*")&&!app.markdownPlainText(markdown).contains("=="),"copied Markdown text retained formatting markers");
                 MainActivity.Note sample=app.new Note();sample.text=markdown;check(!app.preview(sample).contains("*")&&!app.preview(sample).contains("=="),"home note preview retained formatting markers");
                 check(!app.text(markdown,16,app.ink,false).getText().toString().contains("**"),"formatted note TextView exposed Markdown markers");
+                app.linear=new android.widget.EditText(app);app.linear.setText("==a==bc");app.linear.setSelection(2,7);app.formatEditorSelection("==","==");
+                check(app.linear.getText().toString().equals("==abc=="),"applying highlight to a selection with existing highlighted text did not merge the range");
                 android.text.SpannableString editable=new android.text.SpannableString(markdown);app.applyMarkdownStyles(editable);
                 check(editable.getSpans(0,editable.length(),MainActivity.MarkdownMarkerSpan.class).length==rendered.markers.size(),"editor did not hide every Markdown marker");
                 try { original = app.backupJson(); } catch (Exception e) { throw new AssertionError(e); }
