@@ -94,8 +94,10 @@ public class EditorRegressionInstrumentation extends Instrumentation {
                 check(!app.text(markdown,16,app.ink,false).getText().toString().contains("**"),"formatted note TextView exposed Markdown markers");
                 app.linear=new android.widget.EditText(app);app.linear.setText("==a==bc");app.linear.setSelection(2,7);app.formatEditorSelection("==","==");
                 check(app.linear.getText().toString().equals("==abc=="),"applying highlight to a selection with existing highlighted text did not merge the range");
+                check(app.linear.getSelectionStart()==2&&app.linear.getSelectionEnd()==5,"applying highlight cleared the selected text");
                 app.linear.setText("<u>abc</u>");app.linear.setSelection(3,6);app.formatEditorSelection("<u>","</u>");
                 check(app.linear.getText().toString().equals("abc"),"reapplying underline did not remove it");
+                check(app.linear.getSelectionStart()==0&&app.linear.getSelectionEnd()==3,"removing underline cleared the selected text");
                 app.linear.setText("**abc**");app.linear.setSelection(2,5);app.formatEditorSelection("**","**");
                 check(app.linear.getText().toString().equals("abc"),"reapplying bold did not remove it");
                 app.linear.setText("<u>a</u>bc");app.linear.setSelection(3,10);app.formatEditorSelection("<u>","</u>");
