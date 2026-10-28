@@ -89,6 +89,9 @@ public class EditorRegressionInstrumentation extends Instrumentation {
                 MainActivity.MarkdownResult rendered=app.parseMarkdown(markdown);
                 check(!rendered.rendered.toString().contains("**")&&!rendered.rendered.toString().contains("==")&&!rendered.rendered.toString().contains("<u>"),"Markdown preview exposed formatting markers");
                 check(rendered.rendered.toString().startsWith("头左转平移")&&rendered.styles.size()==4,"nested or multiline Markdown formatting did not parse");
+                check(!app.markdownPlainText(markdown).contains("*")&&!app.markdownPlainText(markdown).contains("=="),"copied Markdown text retained formatting markers");
+                MainActivity.Note sample=app.new Note();sample.text=markdown;check(!app.preview(sample).contains("*")&&!app.preview(sample).contains("=="),"home note preview retained formatting markers");
+                check(!app.text(markdown,16,app.ink,false).getText().toString().contains("**"),"formatted note TextView exposed Markdown markers");
                 android.text.SpannableString editable=new android.text.SpannableString(markdown);app.applyMarkdownStyles(editable);
                 check(editable.getSpans(0,editable.length(),MainActivity.MarkdownMarkerSpan.class).length==rendered.markers.size(),"editor did not hide every Markdown marker");
                 try { original = app.backupJson(); } catch (Exception e) { throw new AssertionError(e); }
