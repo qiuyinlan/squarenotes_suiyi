@@ -85,6 +85,12 @@ public class EditorRegressionInstrumentation extends Instrumentation {
             Intent launch = new Intent(getTargetContext(), MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             app = (MainActivity) startActivitySync(launch); waitForIdleSync();
             main(() -> {
+                String markdown="头<u>左转**</u>平移，右看抵舌头，躯干左转，拉伸活动腿。\n**多字\n加粗** 和 ==跨\n行荧光==";
+                MainActivity.MarkdownResult rendered=app.parseMarkdown(markdown);
+                check(!rendered.rendered.toString().contains("**")&&!rendered.rendered.toString().contains("==")&&!rendered.rendered.toString().contains("<u>"),"Markdown preview exposed formatting markers");
+                check(rendered.rendered.toString().startsWith("头左转平移")&&rendered.styles.size()==4,"nested or multiline Markdown formatting did not parse");
+                android.text.SpannableString editable=new android.text.SpannableString(markdown);app.applyMarkdownStyles(editable);
+                check(editable.getSpans(0,editable.length(),MainActivity.MarkdownMarkerSpan.class).length==rendered.markers.size(),"editor did not hide every Markdown marker");
                 try { original = app.backupJson(); } catch (Exception e) { throw new AssertionError(e); }
                 app.notes.clear(); app.trash.clear(); app.labels.clear(); app.pinnedLabels.clear(); app.notebooks.clear();
                 first = app.new Note(); first.title = "回归笔记 A"; second = app.new Note(); second.title = "回归笔记 B";
