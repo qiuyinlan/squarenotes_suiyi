@@ -94,6 +94,9 @@ public class EditorRegressionInstrumentation extends Instrumentation {
                 check(!app.text(markdown,16,app.ink,false).getText().toString().contains("**"),"formatted note TextView exposed Markdown markers");
                 android.widget.EditText listEditor=new android.widget.EditText(app);app.continueListOnEnter(listEditor);listEditor.setText("1.");listEditor.setSelection(2);listEditor.getText().insert(2," ");
                 check(listEditor.getText().toString().equals("  1. ")&&listEditor.getSelectionStart()==5,"typing an ordered-list trigger did not indent the list marker");
+                check(app.markdownPlainText("  - list item").equals("  • list item"),"unordered list preview did not render a bullet");
+                android.text.SpannableString bulletText=new android.text.SpannableString("  - list item");app.applyMarkdownStyles(bulletText);
+                check(bulletText.getSpans(0,bulletText.length(),MainActivity.MarkdownBulletSpan.class).length==1,"unordered list editor did not render a bullet span");
                 app.linear=new android.widget.EditText(app);app.linear.setText("==a==bc");app.linear.setSelection(2,7);app.formatEditorSelection("==","==");
                 check(app.linear.getText().toString().equals("==abc=="),"applying highlight to a selection with existing highlighted text did not merge the range");
                 check(app.linear.getSelectionStart()==2&&app.linear.getSelectionEnd()==5,"applying highlight cleared the selected text");
