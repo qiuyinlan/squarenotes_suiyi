@@ -77,6 +77,60 @@ public class EditorRegressionInstrumentation extends Instrumentation {
         check(titleView instanceof TextView && !((TextView) titleView).getText().toString().equals(first.title), "trash header still shows the editor note");
     }
 
+    void checkEditorSwipe() {
+        MainActivity.TagEditText editor=app.new TagEditText();
+        android.widget.FrameLayout parent=new android.widget.FrameLayout(app);
+        parent.addView(editor,new android.widget.FrameLayout.LayoutParams(600,400));
+        StringBuilder body=new StringBuilder();for(int i=0;i<200;i++)body.append("Line ").append(i).append(" content for scrolling\n");
+        editor.setText(body.toString());editor.setSelection(0);
+        int exact=android.view.View.MeasureSpec.EXACTLY;
+        parent.measure(android.view.View.MeasureSpec.makeMeasureSpec(600,exact),android.view.View.MeasureSpec.makeMeasureSpec(400,exact));
+        parent.layout(0,0,600,400);editor.scrollTo(0,0);
+        long down=SystemClock.uptimeMillis();
+        int[] actions={MotionEvent.ACTION_DOWN,MotionEvent.ACTION_MOVE,MotionEvent.ACTION_MOVE,MotionEvent.ACTION_UP};
+        float[] positions={300,220,120,80};
+        try {
+            for(int i=0;i<actions.length;i++){
+                MotionEvent event=MotionEvent.obtain(down,down+i*20,actions[i],100,positions[i],0);
+                editor.onTouchEvent(event);event.recycle();
+            }
+            check(editor.getScrollY()>100,"editor swipe did not scroll the text");
+            check(editor.getSelectionStart()==0&&editor.getSelectionEnd()==0,"swipe moved the caret instead of scrolling");
+            check(editor.getText().toString().equals(body.toString()),"scrolling changed note content");
+            int before=editor.getScrollY();
+            check(!editor.bringPointIntoView(0)&&editor.getScrollY()==before,"caret reveal interrupted the scroll fling");
+        } finally { parent.removeView(editor);editor.touchScroller.abortAnimation(); }
+    }
+
+    void checkSystemBarInsets() {
+        if (android.os.Build.VERSION.SDK_INT < 30) return;
+        android.view.View host = app.findViewById(android.R.id.content);
+        android.view.WindowInsets originalInsets = host.getRootWindowInsets();
+        try {
+            android.view.WindowInsets bars = new android.view.WindowInsets.Builder()
+                .setInsets(android.view.WindowInsets.Type.systemBars(), android.graphics.Insets.of(0, 70, 0, 30))
+                .setInsets(android.view.WindowInsets.Type.displayCutout(), android.graphics.Insets.of(40, 90, 0, 0))
+                .build();
+            host.dispatchApplyWindowInsets(bars);
+            check(host.getPaddingTop() == 90 && host.getPaddingLeft() == 40 && host.getPaddingBottom() == 30,
+                "system bars or display cutout overlap content");
+            host.dispatchApplyWindowInsets(bars);
+            check(host.getPaddingTop() == 90, "repeated insets accumulated top padding");
+            host.dispatchApplyWindowInsets(new android.view.WindowInsets.Builder(bars)
+                .setInsets(android.view.WindowInsets.Type.ime(), android.graphics.Insets.of(0, 0, 0, 500)).build());
+            check(host.getPaddingBottom() == 500, "keyboard and navigation bar insets were added twice");
+            host.dispatchApplyWindowInsets(bars);
+            check(host.getPaddingBottom() == 30, "keyboard dismissal left extra bottom padding");
+            host.dispatchApplyWindowInsets(new android.view.WindowInsets.Builder()
+                .setInsets(android.view.WindowInsets.Type.systemBars(), android.graphics.Insets.of(0, 0, 60, 0)).build());
+            check(host.getPaddingTop() == 0 && host.getPaddingLeft() == 0 && host.getPaddingRight() == 60,
+                "rotation did not update safe edges");
+        } finally {
+            if (originalInsets != null) host.dispatchApplyWindowInsets(originalInsets);
+            host.requestApplyInsets();
+        }
+    }
+
     @Override public void onStart() {
         Bundle result = new Bundle(); boolean welcome = getTargetContext().getSharedPreferences("suiyi", 0).getBoolean("welcomeLetterSeen", false);
         getTargetContext().getSharedPreferences("suiyi", 0).edit().putBoolean("welcomeLetterSeen", true).commit();
@@ -84,14 +138,15 @@ public class EditorRegressionInstrumentation extends Instrumentation {
         try {
             Intent launch = new Intent(getTargetContext(), MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             app = (MainActivity) startActivitySync(launch); waitForIdleSync();
+            main(this::checkSystemBarInsets);
+            main(this::checkEditorSwipe);
             main(() -> {
                 String markdown="头<u>左转**</u>平移，右看抵舌头，躯干左转，拉伸活动腿。\n**多字\n加粗** 和 ==跨\n行荧光==";
-                MainActivity.MarkdownResult rendered=app.parseMarkdown(markdown);
+                MainActivity.MarkdownResult rendered=app.parseLegacyInlineFormatting(markdown);
                 check(!rendered.rendered.toString().contains("**")&&!rendered.rendered.toString().contains("==")&&!rendered.rendered.toString().contains("<u>"),"Markdown preview exposed formatting markers");
                 check(rendered.rendered.toString().startsWith("头左转平移")&&rendered.styles.size()==4,"nested or multiline Markdown formatting did not parse");
-                check(!app.markdownPlainText(markdown).contains("*")&&!app.markdownPlainText(markdown).contains("=="),"copied Markdown text retained formatting markers");
-                MainActivity.Note sample=app.new Note();sample.text=markdown;check(!app.preview(sample).contains("*")&&!app.preview(sample).contains("=="),"home note preview retained formatting markers");
-                check(!app.text(markdown,16,app.ink,false).getText().toString().contains("**"),"formatted note TextView exposed Markdown markers");
+                check(app.markdownPlainText(markdown).equals(markdown),"literal stars and equals signs were interpreted as inline Markdown");
+                try { JSONObject legacy=new JSONObject();legacy.put("text","**abc** ==def==");MainActivity.Note sample=app.new Note(legacy);check(sample.text.equals("abc def")&&sample.textStyles.size()==2,"legacy formatting did not migrate to direct styles");check(sample.textStyles.get(0).start==0&&sample.textStyles.get(0).end==3,"legacy style range moved during migration");MainActivity.Note roundtrip=app.new Note(sample.json());check(roundtrip.text.equals(sample.text)&&roundtrip.textStyles.size()==2,"legacy migration was not idempotent"); } catch(Exception e){throw new AssertionError(e);}
                 android.widget.EditText listEditor=new android.widget.EditText(app);app.continueListOnEnter(listEditor);listEditor.setText("1.");listEditor.setSelection(2);listEditor.getText().insert(2," ");
                 check(listEditor.getText().toString().equals("  1. ")&&listEditor.getSelectionStart()==5,"typing an ordered-list trigger did not indent the list marker");
                 app.linear=new android.widget.EditText(app);app.linear.setText("item");app.linear.setSelection(0);app.insertListPrefix("1. ",true);
@@ -99,18 +154,18 @@ public class EditorRegressionInstrumentation extends Instrumentation {
                 check(app.markdownPlainText("  - list item").equals("  • list item"),"unordered list preview did not render a bullet");
                 android.text.SpannableString bulletText=new android.text.SpannableString("  - list item");app.applyMarkdownStyles(bulletText);
                 check(bulletText.getSpans(0,bulletText.length(),MainActivity.MarkdownBulletSpan.class).length==1,"unordered list editor did not render a bullet span");
-                app.linear=new android.widget.EditText(app);app.linear.setText("==a==bc");app.linear.setSelection(2,7);app.formatEditorSelection("==","==");
-                check(app.linear.getText().toString().equals("==abc=="),"applying highlight to a selection with existing highlighted text did not merge the range");
-                check(app.linear.getSelectionStart()==2&&app.linear.getSelectionEnd()==5,"applying highlight cleared the selected text");
-                app.linear.setText("<u>abc</u>");app.linear.setSelection(3,6);app.formatEditorSelection("<u>","</u>");
-                check(app.linear.getText().toString().equals("abc"),"reapplying underline did not remove it");
-                check(app.linear.getSelectionStart()==0&&app.linear.getSelectionEnd()==3,"removing underline cleared the selected text");
-                app.linear.setText("**abc**");app.linear.setSelection(2,5);app.formatEditorSelection("**","**");
-                check(app.linear.getText().toString().equals("abc"),"reapplying bold did not remove it");
-                app.linear.setText("<u>a</u>bc");app.linear.setSelection(3,10);app.formatEditorSelection("<u>","</u>");
-                check(app.linear.getText().toString().equals("<u>abc</u>"),"partially formatted underline selection did not merge");
+                app.note=app.new Note();app.linear=new android.widget.EditText(app);app.linear.setText("abc");app.linear.setSelection(0,2);app.formatEditorSelection("highlight","");
+                check(app.linear.getText().toString().equals("abc"),"applying highlight inserted formatting markers into the note text");
+                check(app.linear.getText().getSpans(0,2,MainActivity.DirectHighlightSpan.class).length==1&&app.note.textStyles.size()==1,"highlight was not applied or stored as a direct style");
+                app.linear.setSelection(0,2);app.formatEditorSelection("highlight","");
+                check(app.linear.getText().getSpans(0,2,MainActivity.DirectHighlightSpan.class).length==0&&app.note.textStyles.isEmpty(),"toggling highlight off did not remove the style");
+                app.linear.setSelection(0,3);app.formatEditorSelection("bold","");
+                check(app.linear.getText().toString().equals("abc")&&app.linear.getText().getSpans(0,3,MainActivity.DirectBoldSpan.class).length==1,"bold formatting changed the text or did not apply directly");
+                app.linear.setSelection(1,2);app.formatEditorSelection("bold","");
+                check(app.linear.getText().getSpans(0,3,MainActivity.DirectBoldSpan.class).length==2,"removing bold from a sub-selection did not preserve the surrounding style");
+                try { MainActivity.Note restored=app.new Note(app.note.json());check(restored.textStyles.size()==2,"direct style ranges were not persisted"); } catch(Exception e) { throw new AssertionError(e); }
                 android.text.SpannableString editable=new android.text.SpannableString(markdown);app.applyMarkdownStyles(editable);
-                check(editable.getSpans(0,editable.length(),MainActivity.MarkdownMarkerSpan.class).length==rendered.markers.size(),"editor did not hide every Markdown marker");
+                check(editable.getSpans(0,editable.length(),MainActivity.MarkdownMarkerSpan.class).length==0,"editor still hides inline Markdown characters");
                 try { original = app.backupJson(); } catch (Exception e) { throw new AssertionError(e); }
                 app.notes.clear(); app.trash.clear(); app.labels.clear(); app.pinnedLabels.clear(); app.notebooks.clear();
                 first = app.new Note(); first.title = "回归笔记 A"; second = app.new Note(); second.title = "回归笔记 B";
